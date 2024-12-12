@@ -15,14 +15,12 @@ FIREBASE_API_KEY = 'AIzaSyD29zvJ5gOvHRgk1qUWFzZJL8foY1sf8bk'
 # Route to landing page; redirects to home if logged in
 @app.route('/')
 def landing():
-  
     return render_template('landingpage.html')
 
 # Route to home page, only accessible if logged in
 @app.route('/home')
 def home():
-  
     return render_template('index.html')
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

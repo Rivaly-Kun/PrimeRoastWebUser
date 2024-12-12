@@ -28,7 +28,7 @@ function openNotifModal() {
 
     const user = auth.currentUser;
     if (user) {
-        const notifsRef = ref(db, `Notifications/${user.uid}`);
+        const notifsRef = ref(db, `users/${user.uid}/Notifications/`);
         onValue(notifsRef, (snapshot) => {
             const notifications = snapshot.val();
             
@@ -37,7 +37,7 @@ function openNotifModal() {
                 const table = document.createElement("table");
                 const tableHeader = `
                     <tr>
-                        <th>Title</th>
+                      
                         <th>Message</th>
                         <th>Date</th>
                     </tr>
@@ -58,7 +58,7 @@ function openNotifModal() {
                     const date = new Date(notif.timestamp);
                     dateCell.textContent = date.toLocaleString();
 
-                    row.appendChild(titleCell);
+                  
                     row.appendChild(messageCell);
                     row.appendChild(dateCell);
 

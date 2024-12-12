@@ -102,10 +102,16 @@ export function setupAddToCartButtons() {
 
                 if (productSnapshot.exists()) {
                     const productData = productSnapshot.val();
-                    const variants = Object.entries(productData.variant).map(([key, value]) => {
-                        const [name, price] = value.split(" + ");
-                        return { name, price };
-                    });
+                    console.log(productData);
+
+                    // Adjusting to match the correct structure of variants
+                    const variants = productData.variants
+                        ? Object.entries(productData.variants).map(([key, value]) => ({
+                            name: value.name,
+                            price: value.price,
+                            stock: value.stock,
+                        }))
+                        : [];
 
                     // Show modal to choose variant before adding to cart
                     addToCart(productId, productName, productImage, quantity, variants);
@@ -118,6 +124,7 @@ export function setupAddToCartButtons() {
         });
     });
 }
+
 
 
 // Add event listeners to the floating cart button and close button
@@ -313,6 +320,7 @@ function placeOrder() {
             const userUid = user.uid;
             const cartRef = ref(db, `/users/${userUid}/cart`);
             const ordersRef = ref(db, `/orders/${userUid}`);
+            const outgoingRef = ref(db, `/outgoing/${userUid}`);
             const orderIndexRef = ref(db, `/orderIndex/${userUid}`);
             const contactNumRef = ref(db, `users/${userUid}/contactNumber`);
 
@@ -328,104 +336,134 @@ function placeOrder() {
                 return;
             }
 
-            get(cartRef).then((snapshot) => {
-                const cartItems = snapshot.val();
+            // Check if the user has an existing order in "orders" or "outgoing"
+            get(ordersRef).then((ordersSnapshot) => {
+                if (ordersSnapshot.exists()) {
+                    Swal.fire({
+                        title: 'You already have an order in progress!',
+                        text: 'Please wait for your current order to complete before placing a new one.',
+                        icon: 'warning'
+                    });
+                    throw new Error('User already has an order in progress.');
+                }
 
-                if (cartItems) {
-                    get(orderIndexRef).then((indexSnapshot) => {
-                        let currentIndex = indexSnapshot.val() || 0;
-                        const nextIndex = currentIndex + 1;
-                        const orderRef = ref(db, `/orders/${userUid}/${nextIndex}`);
+                return get(outgoingRef);
+            }).then((outgoingSnapshot) => {
+                if (outgoingSnapshot.exists()) {
+                    Swal.fire({
+                        title: 'Your order is already in the outgoing queue!',
+                        text: 'Please wait for your current order to be delivered.',
+                        icon: 'warning'
+                    });
+                    throw new Error('User already has an order in the outgoing queue.');
+                }
 
-                        // Generate unique order ID
-                        const orderUID = `${userUid}-${nextIndex}`;
+                // Proceed if no existing order is found
+                get(cartRef).then((snapshot) => {
+                    const cartItems = snapshot.val();
 
-                        // Generate the QR code and convert it to a data URL
-                        QRCode.toDataURL(orderUID, function (error, qrDataUrl) {
-                            if (error) {
-                                console.error('Error generating QR code:', error);
-                                return;
-                            }
+                    if (cartItems) {
+                        get(orderIndexRef).then((indexSnapshot) => {
+                            let currentIndex = indexSnapshot.val() || 0;
+                            const nextIndex = currentIndex + 1;
+                            const orderRef = ref(db, `/orders/${userUid}/${nextIndex}`);
 
-                            // Fetch location details from Firebase
-                            const locationRef = ref(db, `/users/${userUid}/locations/${selectedLocationId}`);
-                            get(locationRef).then((locationSnapshot) => {
-                                const selectedLocation = locationSnapshot.val();
+                            // Generate unique order ID
+                            const orderUID = `${userUid}`;
 
-                                // Fetch contact number from Firebase
-                                get(contactNumRef).then((contactSnapshot) => {
-                                    const contactNumber = contactSnapshot.val() || "";
+                            // Generate the QR code and convert it to a data URL
+                            QRCode.toDataURL(orderUID, function (error, qrDataUrl) {
+                                if (error) {
+                                    console.error('Error generating QR code:', error);
+                                    return;
+                                }
 
-                                    set(orderRef, {
-                                        userId: userUid,
-                                        orderItems: cartItems,
-                                        orderTime: new Date().toLocaleDateString('en-US', {
-                                            timeZone: 'Asia/Manila', // Set the time zone to Philippine Time
-                                            year: 'numeric',
-                                            month: '2-digit',
-                                            day: '2-digit'
-                                        }) + ', ' + new Date().toLocaleTimeString('en-US', {
-                                            timeZone: 'Asia/Manila', // Set the time zone to Philippine Time
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            second: '2-digit',
-                                            hour12: true // Use 12-hour format (AM/PM)
-                                        }),
-                                        location: selectedLocation,
-                                        contactNumber: contactNumber,  // Include contact number
-                                        qrCode: qrDataUrl, // Save QR code image as data URL
-                                    Status: "Processing" // Save QR code image as data URL
-                                    }).then(() => {
-                                        // Clear cart after order is placed
-                                        remove(cartRef).then(() => {
-                                            // Update order index
-                                            set(orderIndexRef, nextIndex).then(() => {
-                                                // Show the coffee animation
-                                                document.getElementById('coffee-wrap').style.display = 'block';
+                                // Fetch location details from Firebase
+                                const locationRef = ref(db, `/users/${userUid}/locations/${selectedLocationId}`);
+                                get(locationRef).then((locationSnapshot) => {
+                                    const selectedLocation = locationSnapshot.val();
 
-                                                // Show success alert and QR code modal after delay
-                                                setTimeout(() => {
-                                                    Swal.fire({
-                                                        title: 'Order placed!',
-                                                        icon: 'success'
-                                                    });
+                                    // Fetch contact number from Firebase
+                                    get(contactNumRef).then((contactSnapshot) => {
+                                        const contactNumber = contactSnapshot.val() || "";
 
-                                                    // Hide coffee animation
-                                                    document.getElementById('coffee-wrap').style.display = 'none';
-                                                    generateQrCode(orderUID);
-                                                    openQrModal();
-                                                }, 5000);
+                                        set(orderRef, {
+                                            userId: userUid,
+                                            orderItems: cartItems,
+                                            orderTime: new Date().toLocaleDateString('en-US', {
+                                                timeZone: 'Asia/Manila', // Set the time zone to Philippine Time
+                                                year: 'numeric',
+                                                month: '2-digit',
+                                                day: '2-digit'
+                                            }) + ', ' + new Date().toLocaleTimeString('en-US', {
+                                                timeZone: 'Asia/Manila', // Set the time zone to Philippine Time
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                hour12: true // Use 12-hour format (AM/PM)
+                                            }),
+                                            location: selectedLocation,
+                                            contactNumber: contactNumber,
+                                            qrCode: qrDataUrl,
+                                            Status: "Processing"
+                                        }).then(() => {
+                                            // Clear cart after order is placed
+                                            remove(cartRef).then(() => {
+                                                // Update order index
+                                                set(orderIndexRef, nextIndex).then(() => {
+                                                    // Show the coffee animation
+                                                    document.getElementById('coffee-wrap').style.display = 'block';
+
+                                                    // Show success alert and QR code modal after delay
+                                                    setTimeout(() => {
+                                                        Swal.fire({
+                                                            title: 'Order placed!',
+                                                            icon: 'success'
+                                                        });
+
+                                                        // Hide coffee animation
+                                                        document.getElementById('coffee-wrap').style.display = 'none';
+                                                        generateQrCode(orderUID);
+                                                        openQrModal();
+                                                    }, 5000);
+                                                }).catch((error) => {
+                                                    console.error('Error updating order index:', error);
+                                                });
                                             }).catch((error) => {
-                                                console.error('Error updating order index:', error);
+                                                console.error('Error clearing cart:', error);
                                             });
                                         }).catch((error) => {
-                                            console.error('Error clearing cart:', error);
+                                            console.error('Error placing order:', error);
                                         });
                                     }).catch((error) => {
-                                        console.error('Error placing order:', error);
+                                        console.error('Error retrieving contact number:', error);
                                     });
                                 }).catch((error) => {
-                                    console.error('Error retrieving contact number:', error);
+                                    console.error('Error retrieving location:', error);
                                 });
-                            }).catch((error) => {
-                                console.error('Error retrieving location:', error);
                             });
+                        }).catch((error) => {
+                            console.error('Error retrieving order index:', error);
                         });
-                    }).catch((error) => {
-                        console.error('Error retrieving order index:', error);
-                    });
-                } else {
-                    Swal.fire({
-                        title: 'Your cart is empty!',
-                        icon: 'error'
-                    });
-                }
+                    } else {
+                        Swal.fire({
+                            title: 'Your cart is empty!',
+                            icon: 'error'
+                        });
+                    }
+                }).catch((error) => {
+                    console.error('Error retrieving cart items:', error);
+                });
             }).catch((error) => {
-                console.error('Error retrieving cart items:', error);
+                if (error.message !== 'User already has an order in progress.' && 
+                    error.message !== 'User already has an order in the outgoing queue.') {
+                    console.error('Error checking for existing orders:', error);
+                }
             });
         }
     });
 }
+
 
 
 // QR Code generation function
