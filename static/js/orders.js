@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/9.13.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.13.0/firebase-auth.js";
-import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.13.0/firebase-database.js";
+import { getDatabase, ref, get, remove } from "https://www.gstatic.com/firebasejs/9.13.0/firebase-database.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -18,17 +18,17 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 const db = getDatabase(app);
-const DELIVERY_FEE = 50.00; // Define delivery fee here
+const DELIVERY_FEE = 50.00;
 
 // Function to fetch and display order details for the current user
 function fetchAndDisplayOrders(currentUserUID) {
-    const userOrdersPath = `/orders/${currentUserUID}`; // Access path for the current user's orders
+    const userOrdersPath = `/orders/${currentUserUID}`;
     const dbRef = ref(db, userOrdersPath);
 
     get(dbRef).then((snapshot) => {
         const ordersTableBody = document.getElementById("orders-table-body");
         const noOrdersOverlay = document.getElementById("no-orders-overlay");
-        ordersTableBody.innerHTML = ""; // Clear previous content
+        ordersTableBody.innerHTML = "";
 
         if (snapshot.exists()) {
             const orders = snapshot.val();
@@ -36,9 +36,8 @@ function fetchAndDisplayOrders(currentUserUID) {
 
             Object.keys(orders).forEach(batchIndex => {
                 const batch = orders[batchIndex];
-                
-                if (batch && typeof batch === 'object') { // Valid batch check
-                    hasOrders = true; // Indicate that there are orders
+                if (batch && typeof batch === 'object') {
+                    hasOrders = true;
 
                     const batchContainer = document.createElement("div");
                     batchContainer.classList.add("batch-container");
@@ -48,13 +47,11 @@ function fetchAndDisplayOrders(currentUserUID) {
                     batchTitle.textContent = `Order Batch #${batchIndex}`;
                     batchContainer.appendChild(batchTitle);
 
-                    // Extract order-wide details
                     const contactNumber = batch.contactNumber || "N/A";
                     const address = batch.location?.address || "N/A";
                     const orderTime = batch.orderTime || "N/A";
                     const status = batch.Status || "N/A";
 
-                    // Create a table for this batch's order items
                     const table = document.createElement("table");
                     table.innerHTML = `
                         <thead>
@@ -62,35 +59,27 @@ function fetchAndDisplayOrders(currentUserUID) {
                                 <th>Product</th>
                                 <th>Quantity</th>
                                 <th>Price</th>
-                                <th>Variant</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Orders will be dynamically added here -->
-                        </tbody>
+                        <tbody></tbody>
                     `;
                     const tableBody = table.querySelector("tbody");
-
                     let totalPrice = 0;
 
-                    // Loop through each order item in the batch
                     const orderItems = batch.orderItems || {};
-
                     Object.keys(orderItems).forEach(itemId => {
                         const item = orderItems[itemId];
                         const productName = item.productName || "N/A";
                         const quantity = item.quantity || 1;
                         const price = item.price || 0;
-                        const variant = item.variant || "N/A";
 
-                        totalPrice += price * quantity; // Calculate the running total for batch
+                        totalPrice += price * quantity;
 
                         const row = document.createElement("tr");
                         row.innerHTML = `
                             <td>${productName}</td>
                             <td>${quantity}</td>
                             <td>₱${(price * quantity).toFixed(2)}</td>
-                            <td>${variant}</td>
                         `;
                         tableBody.appendChild(row);
                     });
@@ -98,11 +87,10 @@ function fetchAndDisplayOrders(currentUserUID) {
                     const totalRow = document.createElement("tr");
                     totalRow.innerHTML = `
                         <td colspan="2"><strong>Total</strong></td>
-                        <td colspan="2"><strong>₱${(totalPrice + DELIVERY_FEE).toFixed(2)}</strong></td>
+                        <td><strong>₱${(totalPrice + DELIVERY_FEE).toFixed(2)}</strong></td>
                     `;
                     tableBody.appendChild(totalRow);
 
-                    // Add order-wide details under the table
                     const orderDetails = document.createElement("div");
                     orderDetails.classList.add("order-details");
                     orderDetails.innerHTML = `
@@ -110,23 +98,48 @@ function fetchAndDisplayOrders(currentUserUID) {
                         <p><strong>Address:</strong> ${address}</p>
                         <p><strong>Order Time:</strong> ${orderTime}</p>
                         <p><strong>Status:</strong> ${status}</p>
+                        <button type="button" id="CancelOrderBtn-${batchIndex}" class="cancel-order-btn">Cancel Order</button>
                     `;
+
+                    // Add event listener for Cancel Order button
+                    orderDetails.querySelector(`#CancelOrderBtn-${batchIndex}`).addEventListener("click", () => {
+                        swal({
+                            title: "Are you sure?",
+                            text: "Once deleted, you will not be able to recover this order!",
+                            icon: "warning",
+                            buttons: true,
+                            dangerMode: true,
+                        }).then((willDelete) => {
+                            if (willDelete) {
+                                const orderRef = ref(db, `/orders/${currentUserUID}/${batchIndex}`);
+                                remove(orderRef)
+                                    .then(() => {
+                                        swal("Order has been deleted!", {
+                                            icon: "success",
+                                        });
+                                        batchContainer.remove();
+                                    })
+                                    .catch((error) => {
+                                        console.error("Error deleting order:", error);
+                                        swal("Failed to delete order. Please try again.", {
+                                            icon: "error",
+                                        });
+                                    });
+                            } else {
+                                swal("Your order is safe!");
+                            }
+                        });
+                    });
 
                     batchContainer.appendChild(table);
                     batchContainer.appendChild(orderDetails);
-
                     ordersTableBody.appendChild(batchContainer);
                 }
             });
 
-            // Show or hide the "No orders" overlay
-            if (hasOrders) {
-                noOrdersOverlay.style.display = "none";
-            } else {
-                noOrdersOverlay.style.display = "flex";
-            }
+            noOrdersOverlay.style.display = hasOrders ? "none" : "flex";
         } else {
-            noOrdersOverlay.style.display = "flex"; // Show "No orders" if snapshot is empty
+            noOrdersOverlay.style.display = "flex";
         }
     }).catch(error => {
         console.error("Error fetching orders:", error);
