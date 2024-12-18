@@ -29,21 +29,32 @@ function formatDate(timestamp) {
 }
 
 // Function to create order items HTML
+// Function to create order items HTML
 function createOrderItemsHTML(orderItems) {
-    if (!orderItems) return '';
-    
-    const orderItemsHTML = Object.values(orderItems).map(item => `
-        <div class="order-item">
-            <img src="${item.productImage}" alt="${item.productName}" class="order-item-image">
-            <div class="order-item-details">
-                <span class="order-item-name">${item.productName}</span>
-                <span class="order-item-variant">${item.variant}</span>
-                <span class="order-item-quantity">Quantity: ${item.quantity}</span>
-                <span class="order-item-price">Price: ₱${item.price}</span>
+    if (!orderItems || Object.keys(orderItems).length === 0) {
+        return `<p>No items ordered.</p>`;
+    }
+
+    const orderItemsHTML = Object.values(orderItems).map(item => {
+        const imageUrl = item.productImage || 'https://via.placeholder.com/60'; // Fallback image
+        const productName = item.productName || 'Unnamed Product';
+        const variant = item.variant || 'No variant';
+        const quantity = item.quantity || 1;
+        const price = item.price ? `₱${item.price}` : 'Price unavailable';
+
+        return `
+            <div class="order-item">
+                <img src="${imageUrl}" alt="${productName}" class="order-item-image">
+                <div class="order-item-details">
+                    <span class="order-item-name">${productName}</span>
+                    <span class="order-item-variant">${variant}</span>
+                    <span class="order-item-quantity">Quantity: ${quantity}</span>
+                    <span class="order-item-price">${price}</span>
+                </div>
             </div>
-        </div>
-    `).join('');
-    
+        `;
+    }).join('');
+
     return `
         <div class="order-items-container">
             <h3>Ordered Items:</h3>
@@ -51,6 +62,7 @@ function createOrderItemsHTML(orderItems) {
         </div>
     `;
 }
+
 
 // Function to create location HTML
 function createLocationHTML(location) {
@@ -70,35 +82,56 @@ function createLocationHTML(location) {
     `;
 }
 
-// Function to display a single history item
 function displayHistoryItem(historyData) {
     const announcementsDiv = document.getElementById('AnnouncementsDiv');
-    
+
     const historyDiv = document.createElement('div');
     historyDiv.classList.add('history-item');
-    
+
     // Create a more detailed HTML structure for the history item
     historyDiv.innerHTML = `
         <div class="history-item-header">
-            <span class="history-status">Time delivered: </span>
+            <span class="history-status">Time delivered:</span>
             <span class="history-date">${formatDate(historyData.timestamp)}</span>
         </div>
         <div class="history-item-details">
             <div class="history-detail">
-                <strong>Order Time:</strong> ${historyData.orderTime}
+                <strong>Order Time:</strong> ${historyData.orderTime || 'N/A'}
             </div>
             <div class="history-detail">
-                <strong>Contact Number:</strong> ${historyData.contactNumber}
+                <strong>Contact Number:</strong> ${historyData.contactNumber || 'Not Provided'}
             </div>
-       
             ${createLocationHTML(historyData.location)}
-            ${createOrderItemsHTML(historyData.orderItems)}
+
+            <!-- Toggle Button -->
+            <button class="toggle-items-btn">Show/Hide Ordered Items</button>
+
+            <!-- Ordered Items Container -->
+            <div class="order-items-container" style="display: none;">
+                ${createOrderItemsHTML(historyData.orderItems)}
+            </div>
         </div>
     `;
-    
+
     announcementsDiv.appendChild(historyDiv);
+
+    // Add event listener to the toggle button
+    const toggleButton = historyDiv.querySelector('.toggle-items-btn');
+    const orderItemsContainer = historyDiv.querySelector('.order-items-container');
+
+    toggleButton.addEventListener('click', () => {
+        // Toggle visibility
+        if (orderItemsContainer.style.display === 'none') {
+            orderItemsContainer.style.display = 'block';
+        } else {
+            orderItemsContainer.style.display = 'none';
+        }
+    });
+
     toggleNoHistoryMessage(false); // Hide the no-history message when a history item is added
 }
+
+
 
 // Check if there is any history and toggle the message accordingly
 function checkHistoryEmpty() {
